@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 
@@ -12,7 +13,7 @@ class Profile extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
 
     protected static string $view = 'filament.pages.profile';
 
@@ -26,6 +27,10 @@ class Profile extends Page implements HasForms
         $this->name = $user->name;
         $this->email = $user->email;
         $this->balance = $user->balance;
+
+        $this->form->fill([
+            'name' => Auth::user()->name,
+        ]);
     }
 
     protected function getFormSchema(): array
@@ -35,17 +40,30 @@ class Profile extends Page implements HasForms
                 ->required()
                 ->maxLength(255),
             Forms\Components\TextInput::make('email')
-                ->email()
-                ->required()
-                ->maxLength(255),
+                ->disabled(),
             Forms\Components\TextInput::make('balance')
                 ->disabled()
                 ->visible(fn () => Auth::user()->role === 'siswa'),
         ];
     }
 
-    public function getBorrowedBooksProperty()
+
+    public function updateName()
     {
-        return Auth::user()->borrowings()->where('status', 'borrowed')->with('book')->get();
+        $data = $this->form->getState();
+
+        Auth::user()->update([
+            'name' => $data['name'],
+        ]);
+
+        Notification::make()
+            ->title('Profil diperbarui')
+            ->success()
+            ->send();
+    }
+
+    public function getBorrowingHistoryProperty()
+    {
+        return Auth::user()->borrowings()->with('book')->latest('borrowed_at')->get();
     }
 }
