@@ -29,10 +29,12 @@ class BorrowingResource extends Resource
                 Forms\Components\Select::make('user_id')
                     ->label('Student')
                     ->options(User::where('role', 'siswa')->pluck('name', 'id'))
+                    ->searchable()
                     ->required(),
                 Forms\Components\Select::make('book_id')
                     ->label('Book')
                     ->options(Book::where('stock', '>', 0)->pluck('title', 'id'))
+                    ->searchable()
                     ->required(),
                 Forms\Components\DatePicker::make('borrowed_at')
                     ->required(),
