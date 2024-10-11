@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\BookResource\Pages;
 use App\Filament\Resources\BookResource\RelationManagers;
 use App\Models\Book;
+use App\Models\Borrowing;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -12,6 +13,8 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Tables\Actions\Action;
+use Carbon\Carbon;
 
 class BookResource extends Resource
 {
@@ -46,12 +49,74 @@ class BookResource extends Resource
                 Tables\Columns\TextColumn::make('author')->searchable(),
                 Tables\Columns\TextColumn::make('stock'),
                 Tables\Columns\TextColumn::make('borrowed'),
+                Tables\Columns\TextColumn::make('borrowing_status')
+                    ->label('Status')
+                    ->visible(fn () => auth()->user()->role === 'siswa')
+                    ->getStateUsing(function (Book $record) {
+                        $existingBorrowing = Borrowing::where('user_id', auth()->id())
+                            ->where('book_id', $record->id)
+                            ->where('status', 'borrowed')
+                            ->first();
+
+                        return $existingBorrowing ? 'Sedang Dipinjam' : '';
+                    })
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'Sedang Dipinjam' => 'warning',
+                        default => 'success',
+                    }),
             ])
             ->filters([
                 //
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Action::make('borrow')
+                    ->label('Pinjam')
+                    ->icon('heroicon-o-book-open')
+                    ->visible(function (Book $record) {
+                        if (auth()->user()->role !== 'siswa') {
+                            return false;
+                        }
+
+                        $existingBorrowing = Borrowing::where('user_id', auth()->id())
+                            ->where('book_id', $record->id)
+                            ->where('status', 'borrowed')
+                            ->first();
+
+                        return !$existingBorrowing;
+                    })
+                    ->action(function (Book $record) {
+                        if ($record->stock <= 0) {
+                            return;
+                        }
+
+                        $existingBorrowing = Borrowing::where('user_id', auth()->id())
+                            ->where('book_id', $record->id)
+                            ->where('status', 'borrowed')
+                            ->first();
+
+                        if ($existingBorrowing) {
+                            return;
+                        }
+
+                        Borrowing::create([
+                            'user_id' => auth()->id(),
+                            'book_id' => $record->id,
+                            'borrowed_at' => Carbon::now(),
+                            'status' => 'borrowed'
+                        ]);
+                    })
+                    ->requiresConfirmation()
+                    ->modalHeading('Pinjam Buku')
+                    ->modalDescription(fn (Book $record) => "Apakah anda yakin ingin meminjam buku '{$record->title}'?")
+                    ->modalSubmitActionLabel('Ya, Pinjam')
+                    ->successNotification(
+                        notification: fn () => \Filament\Notifications\Notification::make()
+                            ->success()
+                            ->title('Buku berhasil dipinjam')
+                            ->body('Buku telah berhasil dipinjam. Silahkan ambil buku di perpustakaan.')
+                    )
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
